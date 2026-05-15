@@ -1,0 +1,31 @@
+{
+  "name": "lyrics-youtube",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Auto-fetched synced lyrics for YouTube music videos",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "preact": "^10.29.1"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.4.0",
+    "@preact/preset-vite": "^2.10.5",
+    "@types/chrome": "^0.1.42",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "@vitest/ui": "^4.1.6",
+    "eslint": "^10.4.0",
+    "eslint-config-prettier": "^10.1.8",
+    "happy-dom": "^20.9.0",
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.13",
+    "vitest": "^4.1.6"
+  }
+}
