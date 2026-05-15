@@ -1337,6 +1337,8 @@ git commit -m "feat: YouTube DOM watcher (SPA nav + metadata extraction)"
 **Files:**
 - Create: `src/content/overlay/overlay.ts`, `src/content/overlay/overlay.css`
 
+The overlay supports two modes: **synced** (3-line compact view, line index drives highlighting) and **static** (scrollable panel for Genius plain-text fallback, header indicates "Lyrics from Genius (not synced)").
+
 - [ ] **Step 1: Implement CSS**
 
 ```css
@@ -1362,14 +1364,27 @@ git commit -m "feat: YouTube DOM watcher (SPA nav + metadata extraction)"
 .ytlyrics-overlay[data-position="bottom"] { bottom: 60px; }
 .ytlyrics-overlay[data-position="middle"] { top: 50%; transform: translateY(-50%); }
 .ytlyrics-overlay[data-position="top"] { top: 80px; }
-.ytlyrics-overlay[data-mode="compact"] .ytlyrics-line {
+.ytlyrics-overlay[data-mode="synced"] .ytlyrics-line {
   opacity: 0.55;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
-.ytlyrics-overlay[data-mode="compact"] .ytlyrics-line.ytlyrics-active {
+.ytlyrics-overlay[data-mode="synced"] .ytlyrics-line.ytlyrics-active {
   opacity: 1;
   transform: scale(1.08);
   font-weight: 600;
+}
+.ytlyrics-overlay[data-mode="static"] .ytlyrics-static {
+  max-height: 40vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  pointer-events: auto;
+  padding: 8px 0;
+  line-height: 1.45;
+}
+.ytlyrics-overlay[data-mode="static"] .ytlyrics-static-header {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-bottom: 6px;
 }
 .ytlyrics-overlay[data-hidden="true"] { opacity: 0; pointer-events: none; }
 .ytlyrics-controls {
@@ -1388,21 +1403,32 @@ git commit -m "feat: YouTube DOM watcher (SPA nav + metadata extraction)"
 import type { LrcLine, UserSettings } from "../../shared/types";
 import "./overlay.css";
 
+export type OverlayMode = "synced" | "static";
+
 export class LyricsOverlay {
   private el: HTMLDivElement;
   private prevEl: HTMLDivElement;
   private activeEl: HTMLDivElement;
   private nextEl: HTMLDivElement;
+  private staticEl: HTMLDivElement;
+  private staticHeaderEl: HTMLDivElement;
   private controlsEl: HTMLDivElement;
   private lines: LrcLine[] = [];
+  private mode: OverlayMode = "synced";
 
   constructor(parent: HTMLElement, settings: UserSettings, onWrongSong: () => void) {
     this.el = document.createElement("div");
     this.el.className = "ytlyrics-overlay";
-    this.el.dataset.mode = "compact";
+    this.el.dataset.mode = "synced";
     this.el.dataset.position = settings.position;
     this.el.style.fontSize = `${settings.fontSize}px`;
     this.el.dataset.hidden = "false";
+
+    this.staticHeaderEl = document.createElement("div");
+    this.staticHeaderEl.className = "ytlyrics-static-header";
+    this.staticHeaderEl.textContent = "Lyrics from Genius (not synced)";
+    this.staticEl = document.createElement("div");
+    this.staticEl.className = "ytlyrics-static";
 
     this.prevEl = document.createElement("div");
     this.prevEl.className = "ytlyrics-line ytlyrics-prev";
@@ -1418,16 +1444,32 @@ export class LyricsOverlay {
     wrong.addEventListener("click", onWrongSong);
     this.controlsEl.appendChild(wrong);
 
-    this.el.append(this.prevEl, this.activeEl, this.nextEl, this.controlsEl);
+    this.el.append(
+      this.staticHeaderEl, this.staticEl,
+      this.prevEl, this.activeEl, this.nextEl,
+      this.controlsEl,
+    );
+    this.applyModeVisibility();
     parent.appendChild(this.el);
   }
 
-  setLines(lines: LrcLine[]): void {
+  setSyncedLines(lines: LrcLine[]): void {
+    this.mode = "synced";
+    this.el.dataset.mode = "synced";
+    this.applyModeVisibility();
     this.lines = lines;
     this.render(-1);
   }
 
+  setStaticText(text: string): void {
+    this.mode = "static";
+    this.el.dataset.mode = "static";
+    this.applyModeVisibility();
+    this.staticEl.textContent = text;
+  }
+
   render(idx: number): void {
+    if (this.mode !== "synced") return;
     this.prevEl.textContent = idx > 0 ? this.lines[idx - 1]?.text ?? "" : "";
     this.activeEl.textContent = idx >= 0 ? this.lines[idx]?.text ?? "" : "";
     this.nextEl.textContent = idx + 1 < this.lines.length ? this.lines[idx + 1]?.text ?? "" : "";
@@ -1437,6 +1479,10 @@ export class LyricsOverlay {
     this.el.dataset.hidden = String(hidden);
   }
 
+  isHidden(): boolean {
+    return this.el.dataset.hidden === "true";
+  }
+
   applySettings(s: UserSettings): void {
     this.el.dataset.position = s.position;
     this.el.style.fontSize = `${s.fontSize}px`;
@@ -1444,6 +1490,15 @@ export class LyricsOverlay {
 
   destroy(): void {
     this.el.remove();
+  }
+
+  private applyModeVisibility(): void {
+    const synced = this.mode === "synced";
+    this.prevEl.style.display = synced ? "" : "none";
+    this.activeEl.style.display = synced ? "" : "none";
+    this.nextEl.style.display = synced ? "" : "none";
+    this.staticHeaderEl.style.display = synced ? "none" : "";
+    this.staticEl.style.display = synced ? "none" : "";
   }
 }
 ```
@@ -1841,6 +1896,12 @@ git commit -m "feat: popup settings UI"
 **Files:**
 - Replace: `src/content/index.ts`
 
+The orchestrator:
+1. Always injects the player button on every YouTube watch page (even hard-skipped ones), so users can override the filter.
+2. If hard-skip rules pass and no override exists, runs the auto-fetch pipeline: LRCLIB → if no synced lyrics, fall back to Genius automatically.
+3. If hard-skip rules fail, button is "unavailable, never fetched"; clicking it triggers a forced fetch as if the video were music.
+4. If both LRCLIB and Genius return nothing, button becomes "unavailable, already fetched"; clicking opens the manual search dialog.
+
 - [ ] **Step 1: Implement orchestrator**
 
 ```ts
@@ -1856,14 +1917,17 @@ import { LyricsOverlay } from "./overlay/overlay";
 import { PlayerButton } from "./overlay/player-button";
 import { openSearchDialog } from "./overlay/search-dialog";
 import { getSettings } from "../shared/settings";
-import type { LrclibResult, LyricsRecord, ParsedSong, RuntimeMessage } from "../shared/types";
+import type { LrclibResult, LyricsRecord, ParsedSong, RuntimeMessage, VideoMetadata } from "../shared/types";
+
+type FetchOutcome = "never-fetched" | "fetched-empty";
 
 type SessionState = {
-  videoId: string;
+  meta: VideoMetadata;
   parsed: ParsedSong;
   overlay: LyricsOverlay | null;
-  button: PlayerButton | null;
+  button: PlayerButton;
   engine: SyncEngine | null;
+  outcome: FetchOutcome;
   cleanupDialog?: () => void;
 };
 let session: SessionState | null = null;
@@ -1882,91 +1946,167 @@ async function run() {
   if (!player || !video) return;
 
   const parsed = normalizeTitle(meta.title, meta.channelName);
-  session = { videoId: meta.videoId, parsed, overlay: null, button: null, engine: null };
 
-  // Inject button
+  // Always inject the button — even on hard-skipped videos
   const rightControls = player.querySelector<HTMLElement>(".ytp-right-controls");
-  if (rightControls) {
-    session.button = new PlayerButton(
-      rightControls,
-      () => onButtonClick(),
-      (_e) => onButtonClick(), // simple: same behavior on right-click for v1; expand later
-    );
-  }
+  if (!rightControls) return;
+  const button = new PlayerButton(
+    rightControls,
+    () => onButtonClick(),
+    () => onButtonClick(),
+  );
 
-  // Decide whether to auto-fetch
+  session = { meta, parsed, overlay: null, button, engine: null, outcome: "never-fetched" };
+
+  // Determine if we auto-fetch
   const override = await getOverride(meta.videoId);
-  const auto = override !== null || shouldAutoFetch(meta, settings.maxDurationSec);
-  if (!auto) {
-    session.button?.setState("unavailable");
+  const allowAuto = override !== null || shouldAutoFetch(meta, settings.maxDurationSec);
+
+  if (!allowAuto) {
+    // Hard-skip filter blocked us. Button stays clickable for manual override.
+    button.setState("unavailable");
     return;
   }
 
-  session.button?.setState("loading");
+  await runFetchPipeline({ artist: parsed.artist, song: parsed.song, override });
+}
 
-  let record: LyricsRecord | null = null;
-  if (override) {
-    record = await getLyrics(override.artist, override.title);
-    if (!record) {
-      const r = await fetchLrclib({ artist: override.artist, song: override.title, durationSec: meta.durationSec });
-      if (r) record = await persistResult(override.artist, override.title, r);
+async function runFetchPipeline(args: { artist: string; song: string; override: { artist: string; title: string } | null }) {
+  if (!session) return;
+  const { meta, parsed } = session;
+  session.button.setState("loading");
+
+  const fetchArtist = args.override?.artist ?? args.artist;
+  const fetchSong = args.override?.title ?? args.song;
+
+  // 1. Cache lookup
+  let record = await getLyrics(fetchArtist, fetchSong);
+
+  // 2. If cache miss, check negative cache for non-overrides
+  if (!record && !args.override) {
+    const negative = await getNoLyrics(fetchArtist, fetchSong);
+    if (negative) {
+      session.outcome = "fetched-empty";
+      session.button.setState("unavailable");
+      return;
     }
-  } else {
-    record = await getLyrics(parsed.artist, parsed.song);
-    if (!record) {
-      const negative = await getNoLyrics(parsed.artist, parsed.song);
-      if (!negative) {
-        const r = await fetchLrclib({ artist: parsed.artist, song: parsed.song, durationSec: meta.durationSec });
-        if (r) record = await persistResult(parsed.artist, parsed.song, r);
-        else await putNoLyrics(parsed.artist, parsed.song);
+  }
+
+  // 3. Fetch fresh: LRCLIB → Genius fallback
+  if (!record) {
+    const lrcResult = await fetchLrclib({ artist: fetchArtist, song: fetchSong, durationSec: meta.durationSec });
+    if (lrcResult?.syncedLyrics) {
+      record = await persistLrclib(fetchArtist, fetchSong, lrcResult);
+    } else {
+      // No synced lyrics anywhere on LRCLIB. Fall back to Genius automatically.
+      const geniusText = await fetchGeniusViaBackground(fetchArtist, fetchSong);
+      if (geniusText) {
+        record = await persistGenius(fetchArtist, fetchSong, geniusText);
+      } else if (lrcResult?.plainLyrics) {
+        // Neither synced LRC nor Genius, but LRCLIB had plain text — use that as static.
+        record = await persistLrclib(fetchArtist, fetchSong, lrcResult);
+      } else {
+        await putNoLyrics(fetchArtist, fetchSong);
       }
     }
   }
 
-  if (!record || !record.syncedLyrics) {
-    session.button?.setState("unavailable");
+  if (!record) {
+    session.outcome = "fetched-empty";
+    session.button.setState("unavailable");
     return;
   }
 
-  const lines = parseLrc(record.syncedLyrics);
-  session.overlay = new LyricsOverlay(player, settings, () => openWrongSongDialog(meta.videoId, parsed));
-  session.overlay.setLines(lines);
-  session.engine = new SyncEngine(video, lines, (idx) => session?.overlay?.render(idx));
-  session.engine.start();
-  session.button?.setState("available");
+  await renderRecord(record);
 }
 
-async function persistResult(artist: string, title: string, r: LrclibResult): Promise<LyricsRecord> {
+async function renderRecord(record: LyricsRecord) {
+  if (!session) return;
+  const settings = await getSettings();
+  const player = getPlayerElement();
+  const video = getVideoElement();
+  if (!player || !video) return;
+
+  const overlay = new LyricsOverlay(
+    player, settings,
+    () => openWrongSongDialog(),
+  );
+  session.overlay = overlay;
+
+  if (record.syncedLyrics) {
+    const lines = parseLrc(record.syncedLyrics);
+    overlay.setSyncedLines(lines);
+    const engine = new SyncEngine(video, lines, (idx) => overlay.render(idx));
+    engine.start();
+    session.engine = engine;
+  } else if (record.plainLyrics) {
+    overlay.setStaticText(record.plainLyrics);
+  } else {
+    overlay.destroy();
+    session.overlay = null;
+    session.outcome = "fetched-empty";
+    session.button.setState("unavailable");
+    return;
+  }
+
+  session.button.setState("available");
+}
+
+async function persistLrclib(artist: string, song: string, r: LrclibResult): Promise<LyricsRecord> {
   const rec: LyricsRecord = {
     syncedLyrics: r.syncedLyrics, plainLyrics: r.plainLyrics,
     source: "lrclib", lrclibId: r.id, fetchedAt: Date.now(),
   };
-  await putLyrics(artist, title, rec);
+  await putLyrics(artist, song, rec);
   return rec;
+}
+
+async function persistGenius(artist: string, song: string, text: string): Promise<LyricsRecord> {
+  const rec: LyricsRecord = {
+    syncedLyrics: null, plainLyrics: text,
+    source: "genius", fetchedAt: Date.now(),
+  };
+  await putLyrics(artist, song, rec);
+  return rec;
+}
+
+async function fetchGeniusViaBackground(artist: string, song: string): Promise<string | null> {
+  const search = await chrome.runtime.sendMessage({ type: "geniusSearch", query: `${artist} ${song}` });
+  if (!search?.url) return null;
+  const lyrics = await chrome.runtime.sendMessage({ type: "geniusFetch", url: search.url });
+  return typeof lyrics === "string" ? lyrics : null;
 }
 
 function onButtonClick() {
   if (!session) return;
   if (session.overlay) {
-    const wasHidden = session.overlay["el"].dataset.hidden === "true";
-    session.overlay.setHidden(!wasHidden);
+    session.overlay.setHidden(!session.overlay.isHidden());
+    return;
+  }
+  if (session.outcome === "never-fetched") {
+    // Hard-skip filter blocked us; user is overriding. Run pipeline now.
+    void runFetchPipeline({ artist: session.parsed.artist, song: session.parsed.song, override: null });
   } else {
-    openWrongSongDialog(session.videoId, session.parsed);
+    // Already fetched and got nothing. Let user search manually.
+    openWrongSongDialog();
   }
 }
 
-function openWrongSongDialog(videoId: string, parsed: ParsedSong) {
+function openWrongSongDialog() {
   if (!session) return;
   const player = getPlayerElement();
   if (!player) return;
   session.cleanupDialog?.();
   session.cleanupDialog = openSearchDialog(player, {
-    initialArtist: parsed.artist,
-    initialSong: parsed.song,
+    initialArtist: session.parsed.artist,
+    initialSong: session.parsed.song,
     onPick: async (r: LrclibResult) => {
-      await putOverride(videoId, { artist: r.artistName, title: r.trackName, lrclibId: r.id, setAt: Date.now() });
-      await persistResult(r.artistName, r.trackName, r);
-      session?.cleanupDialog?.();
+      if (!session) return;
+      await putOverride(session.meta.videoId, {
+        artist: r.artistName, title: r.trackName, lrclibId: r.id, setAt: Date.now(),
+      });
+      await persistLrclib(r.artistName, r.trackName, r);
+      session.cleanupDialog?.();
       void run();
     },
     onClose: () => { session?.cleanupDialog?.(); },
@@ -1983,7 +2123,7 @@ function teardown() {
 
 chrome.runtime.onMessage.addListener((msg: RuntimeMessage) => {
   if (msg.type === "openManualSearch" && session) {
-    openWrongSongDialog(session.videoId, session.parsed);
+    openWrongSongDialog();
   }
 });
 
@@ -2073,8 +2213,16 @@ Load unpacked extension from `dist/` in `chrome://extensions/` (Developer mode o
 - [ ] Increase font size → reflected on next nav
 - [ ] Lower max duration to 60s → 3-min videos no longer auto-fetch
 
+## Genius fallback
+- [ ] Indie song where LRCLIB has no synced lyrics → static panel with Genius lyrics appears, header "Lyrics from Genius (not synced)"
+- [ ] Static panel scrolls; sync engine is not running
+
+## Filter override
+- [ ] Open a podcast with a real song discussion → button is unavailable; click → fetch runs; if results found, overlay appears
+- [ ] Open a YouTube Short → button is unavailable; click → fetch runs
+
 ## Failure modes
-- [ ] Video LRCLIB has nothing for → button shows unavailable, no overlay, no error toast
+- [ ] Video both LRCLIB and Genius have nothing for → button stays unavailable; click button → search dialog opens
 - [ ] Disconnect network → no overlay, console warn only, no UI error
 ```
 
@@ -2102,7 +2250,7 @@ git commit -m "docs: manual test checklist for v1"
 | §4.4 Title normalizer | Task 3 |
 | §4.5 Cache lookup order | Task 16 (orchestration) |
 | §5.1 LRCLIB fetch sequence | Task 6 |
-| §5.2 Genius fallback | Task 14 (covered by background scrape; hooked into dialog v2; v1 background is implemented but UI surface is not — see "v1 limitation" below) |
+| §5.2 Genius fallback (automatic) | Task 14 (background scrape) + Task 16 (`runFetchPipeline` automatically invokes after LRCLIB returns no synced lyrics) |
 | §5.3 Cache schema | Tasks 2, 5 |
 | §5.4 Settings schema | Tasks 2, 8 |
 | §6.1 LRC parsing | Task 4 |
@@ -2116,8 +2264,8 @@ git commit -m "docs: manual test checklist for v1"
 | §8 Error handling | Inline in Task 16 (silent fail on network errors, graceful selector misses in Task 10) |
 | §10 Testing | Tasks 3-9 (unit), Task 17 (manual) |
 
-**v1 limitation flagged during plan review:** The "Try Genius" link in the overlay is *not* implemented in this plan — only the background-side fetch handler exists. Wiring it into the overlay UI would be a small additional task, but per Spec §5.2, Genius is a manual-only fallback and the spec did not require a v1 UI entry point if LRCLIB returns nothing — the user gets "no synced lyrics" and can use manual search. **Decision:** descope the Genius UI button to v2, keep the background scrape stub for future use. (Confirm with user before execution if this is acceptable, or add Task 13.5 to wire a "Try Genius" button into the search dialog.)
+**Spec revision note (2026-05-15):** Genius was reframed from a manual fallback to an automatic one, per user clarification. The orchestrator (Task 16) now calls Genius automatically whenever LRCLIB lacks synced lyrics, and the player button is always injected (even on hard-skipped videos) so users can override the filter. Plan and spec both updated.
 
-**Type consistency check:** ✅ `LrclibResult.id` (number), `OverrideRecord.lrclibId` (number), `LyricsRecord.lrclibId?` (number) — all consistent. `parseLrc` returns `LrcLine[]`, consumed by `SyncEngine` and `LyricsOverlay.setLines` — consistent.
+**Type consistency check:** ✅ `LrclibResult.id` (number), `OverrideRecord.lrclibId` (number), `LyricsRecord.lrclibId?` (number) — all consistent. `parseLrc` returns `LrcLine[]`, consumed by `SyncEngine` and `LyricsOverlay.setSyncedLines` — consistent. `LyricsOverlay` has two entry points (`setSyncedLines`, `setStaticText`) plus `isHidden()` used by the orchestrator's button toggle.
 
 **Placeholder scan:** ✅ no TBD/TODO/"add appropriate error handling" placeholders. Every code step has complete code.

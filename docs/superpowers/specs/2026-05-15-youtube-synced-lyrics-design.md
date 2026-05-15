@@ -33,10 +33,23 @@ When watching music videos on YouTube, viewers often want to read the lyrics in 
 
 ### 2.2 Static fallback: Genius
 
-- **Not** auto-fetched. Only fetched if the user clicks "Try Genius" in the overlay after LRCLIB returns nothing.
-- v1 implementation: search via `genius.com` and scrape lyrics from the song page in the **background service worker** (bypasses CORS).
+- **Automatic** fallback. Triggered whenever LRCLIB returns no synced lyrics for a song — either no record at all, or a record with `plainLyrics` only and `syncedLyrics === null`.
+- v1 implementation: search via `genius.com/api/search/multi` and scrape lyrics from the song page in the **background service worker** (bypasses CORS).
 - Future option: switch to the official Genius API (requires API key + OAuth) if scraping breaks or proves fragile.
-- Genius lyrics are always plain (no sync). Shown in a scrollable panel — no fake/estimated sync.
+- Genius lyrics are always plain (no sync). Shown in the overlay's **static mode**: a scrollable panel with all lyrics, no per-line highlighting and no auto-scroll. The user reads at their own pace.
+- If Genius also returns nothing, the overlay does not appear; the player button shows the "unavailable" state.
+
+**Decision tree for a single song:**
+
+```
+LRCLIB /api/get → has syncedLyrics?  → render synced overlay
+                ↓ no
+LRCLIB /api/search → best match has syncedLyrics?  → render synced overlay
+                ↓ no synced anywhere
+Genius search + scrape → has plain text?  → render static overlay
+                ↓ no
+Show "unavailable" state on player button.
+```
 
 ### 2.3 Out of scope for v1
 
@@ -99,7 +112,7 @@ From the YouTube DOM:
 - `description` — from `#description` (used to detect "Music in this video" section)
 - `liveBadge` — presence of `.ytp-live-badge` indicates live stream → skip
 
-### 4.2 Hard-skip rules (no auto-fetch; manual still available)
+### 4.2 Hard-skip rules (no auto-fetch — but the player button is still injected and clickable for manual search)
 
 Skip if **any** of:
 
@@ -168,12 +181,14 @@ async function fetchLrclib({ artist, song, duration }) {
 }
 ```
 
-### 5.2 Genius fallback (manual only)
+### 5.2 Genius fallback (automatic)
 
-- Triggered when user clicks "Try Genius" in the overlay or during manual search.
-- Background worker fetches `https://genius.com/api/search/multi?q=...`, parses JSON, picks first song result.
-- Background worker fetches the song page HTML, extracts lyrics from the `[data-lyrics-container]` divs (current Genius DOM convention; documented in code with date-stamped comment so the parser is easy to update).
+- Triggered automatically whenever LRCLIB does not produce synced lyrics (no record at all, or only plain text).
+- Content script sends a `geniusFetch` runtime message to the background worker with the parsed `{artist, song}`.
+- Background worker fetches `https://genius.com/api/search/multi?q={artist} {song}`, parses JSON, picks the first `song` section hit.
+- Background worker fetches the song page HTML, extracts lyrics from `[data-lyrics-container]` divs (current Genius DOM convention; documented in code with date-stamped comment so the parser is easy to update).
 - Returns plain text only.
+- Result is cached as a `LyricsRecord` with `source: "genius"`, `syncedLyrics: null`, `plainLyrics: <text>`.
 
 ### 5.3 Cache schema (`chrome.storage.local`)
 
@@ -263,9 +278,10 @@ Word-level enhanced LRC (`<00:12.34>`) is parsed but only used for word highligh
   </div>
   ```
 - Default styling: bottom-third position, semi-transparent dark gradient background, white text, drop shadow for legibility.
-- Two display modes:
-  - **Compact** (default): 3 lines — previous / current (highlighted, scaled 1.1x) / next
-  - **Expanded**: scrollable panel with all lyrics; current line auto-scrolled into view
+- Three display modes:
+  - **Synced compact** (default for synced lyrics): 3 lines — previous / current (highlighted, scaled 1.1x) / next
+  - **Synced expanded** (toggle from compact): scrollable panel with all lyrics; current line auto-scrolled into view
+  - **Static** (used for Genius plain-text fallback): scrollable panel with all lyrics, no highlighting, no auto-scroll. Header text "Lyrics from Genius (not synced)" makes the source explicit.
 
 ### 6.4 Drift handling
 
@@ -280,15 +296,15 @@ Word-level enhanced LRC (`<00:12.34>`) is parsed but only used for word highligh
 
 ### 7.1 Player button
 
-- Injected into `.ytp-right-controls` (next to settings gear), styled to match YouTube's other player buttons.
+- Injected into `.ytp-right-controls` on **every** video page (regardless of detection result), so users can always recover when the filter is too restrictive.
 - Music-note icon. Three states reflected in styling:
   - **Loading** (pulsing): fetch in flight
-  - **Available** (solid): lyrics loaded for this video
-  - **Unavailable** (dimmed): no lyrics found and no override set
-- Click behavior:
-  - If lyrics loaded → toggle overlay visibility
-  - If no lyrics and not yet fetched → trigger fetch
-  - If LRCLIB returned nothing → open manual search dialog
+  - **Available** (solid): lyrics loaded for this video (synced or static)
+  - **Unavailable** (dimmed): hard-skip filter matched, OR fetch completed and nothing was found
+- Click behavior depends on state:
+  - **Available** → toggle overlay visibility on/off
+  - **Unavailable, never fetched** (hard-skip filter blocked auto-fetch) → trigger a manual fetch attempt right now (treats this video as music despite the filter; pipeline runs LRCLIB → Genius)
+  - **Unavailable, already fetched** (LRCLIB and Genius both returned nothing) → open the manual search dialog so the user can try a different artist/song
 - Right-click → context menu: `Search manually...`, `Wrong song?`, `Settings`.
 
 ### 7.2 Manual search dialog
