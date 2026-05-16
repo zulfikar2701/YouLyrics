@@ -64,9 +64,7 @@ export async function extractMetadata(): Promise<VideoMetadata | null> {
   const channelEl = document.querySelector<HTMLElement>(
     "ytd-channel-name #text a, ytd-channel-name a",
   );
-  const liveBadge = document.querySelector(
-    ".ytp-live-badge:not([style*='display: none'])",
-  );
+  const isLive = !Number.isFinite(video.duration) || video.duration === Infinity;
 
   const title = titleEl?.textContent?.trim() ?? "";
   const channelName = channelEl?.textContent?.trim() ?? "";
@@ -78,6 +76,6 @@ export async function extractMetadata(): Promise<VideoMetadata | null> {
     title,
     channelName,
     durationSec,
-    isLive: liveBadge !== null,
+    isLive,
   };
 }

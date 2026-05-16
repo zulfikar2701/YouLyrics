@@ -39,15 +39,37 @@ function hasStrongMusicSignal(meta: VideoMetadata): boolean {
   return false;
 }
 
-export function shouldAutoFetch(meta: VideoMetadata, maxDurationSec: number): boolean {
-  if (meta.isLive) return false;
-  if (meta.durationSec < 30) return false;
-  if (meta.durationSec > maxDurationSec) return false;
+export function shouldAutoFetch(meta: VideoMetadata, maxDurationSec: number, log?: (msg: string) => void): boolean {
+  if (meta.isLive) {
+    log?.("blocked: live stream");
+    return false;
+  }
+  if (meta.durationSec < 30) {
+    log?.(`blocked: duration ${meta.durationSec}s < 30s`);
+    return false;
+  }
+  if (meta.durationSec > maxDurationSec) {
+    log?.(`blocked: duration ${meta.durationSec}s > ${maxDurationSec}s`);
+    return false;
+  }
 
-  if (hasStrongMusicSignal(meta)) return true;
+  if (hasStrongMusicSignal(meta)) {
+    log?.("allowed: strong music signal");
+    return true;
+  }
 
-  if (containsAny(meta.title, NON_MUSIC_TITLE_KEYWORDS)) return false;
-  if (containsAny(meta.channelName, NON_MUSIC_CHANNEL_KEYWORDS)) return false;
+  const badTitle = NON_MUSIC_TITLE_KEYWORDS.find((k) => containsKeyword(meta.title, k));
+  if (badTitle) {
+    log?.(`blocked: title keyword "${badTitle}"`);
+    return false;
+  }
 
+  const badChannel = NON_MUSIC_CHANNEL_KEYWORDS.find((k) => containsKeyword(meta.channelName, k));
+  if (badChannel) {
+    log?.(`blocked: channel keyword "${badChannel}"`);
+    return false;
+  }
+
+  log?.("allowed: no blockers");
   return true;
 }

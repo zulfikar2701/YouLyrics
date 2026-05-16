@@ -56,7 +56,7 @@ async function run() {
   session = { meta, parsed, overlay: null, button, engine: null, outcome: "never-fetched" };
 
   const override = await getOverride(meta.videoId);
-  const allowAuto = override !== null || shouldAutoFetch(meta, settings.maxDurationSec);
+  const allowAuto = override !== null || shouldAutoFetch(meta, settings.maxDurationSec, (m) => dbg("detector", m));
   dbg("allowAuto", allowAuto, "override", override !== null);
 
   if (!allowAuto) {
@@ -164,9 +164,11 @@ async function renderRecord(record: LyricsRecord) {
 }
 
 async function adjustOffset(delta: number) {
+  dbg("adjustOffset called", delta);
   if (!session) return;
   const { parsed } = session;
   const record = await getLyrics(parsed.artist, parsed.song);
+  dbg("adjustOffset record", record ? { hasSync: !!record.syncedLyrics, currentOffset: record.offset ?? 0 } : null);
   if (!record || !record.syncedLyrics) return;
 
   const newOffset = (record.offset ?? 0) + delta;
