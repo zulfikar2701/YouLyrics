@@ -5,19 +5,19 @@ import { DEFAULT_SETTINGS } from "../src/shared/types";
 const store = new Map<string, unknown>();
 beforeEach(() => {
   store.clear();
-  // @ts-expect-error - mock chrome.storage
-  globalThis.chrome = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).chrome = {
     storage: {
       sync: {
         get: vi.fn((keys: string[]) => {
           const out: Record<string, unknown> = {};
           for (const k of keys) if (store.has(k)) out[k] = store.get(k);
           return Promise.resolve(out);
-        }),
+        }) as any,
         set: vi.fn((obj: Record<string, unknown>) => {
           for (const [k, v] of Object.entries(obj)) store.set(k, v);
           return Promise.resolve();
-        }),
+        }) as any,
       },
     },
   };
