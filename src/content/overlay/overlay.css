@@ -16,7 +16,7 @@
   text-shadow: 0 2px 6px rgba(0,0,0,0.8);
   transition: opacity 0.2s ease;
 }
-.ytlyrics-overlay[data-position="bottom"] { bottom: 60px; }
+.ytlyrics-overlay[data-position="bottom"] { bottom: 12px; transition: bottom 0.3s ease; }
 .ytlyrics-overlay[data-position="middle"] { top: 50%; transform: translateY(-50%); }
 .ytlyrics-overlay[data-position="top"] { top: 80px; }
 .ytlyrics-overlay[data-mode="synced"] .ytlyrics-line {

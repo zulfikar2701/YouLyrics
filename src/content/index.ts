@@ -25,6 +25,10 @@ type SessionState = {
 
 let session: SessionState | null = null;
 
+function dbg(...args: unknown[]): void {
+  console.log("[ytlyrics]", ...args);
+}
+
 async function run() {
   teardown();
 
@@ -39,6 +43,7 @@ async function run() {
   if (!player || !video) return;
 
   const parsed = normalizeTitle(meta.title, meta.channelName);
+  dbg("parsed", parsed, "from", meta.title, "|", meta.channelName, "duration", meta.durationSec);
 
   const rightControls = player.querySelector<HTMLElement>(".ytp-right-controls");
   if (!rightControls) return;
@@ -52,6 +57,7 @@ async function run() {
 
   const override = await getOverride(meta.videoId);
   const allowAuto = override !== null || shouldAutoFetch(meta, settings.maxDurationSec);
+  dbg("allowAuto", allowAuto, "override", override !== null);
 
   if (!allowAuto) {
     button.setState("unavailable");
@@ -75,11 +81,13 @@ async function runFetchPipeline(args: {
 
   // 1. Cache lookup
   let record = await getLyrics(fetchArtist, fetchSong);
+  dbg("cache", record ? "hit" : "miss", fetchArtist, "-", fetchSong);
 
   // 2. If cache miss, check negative cache for non-overrides
   if (!record && !args.override) {
     const negative = await getNoLyrics(fetchArtist, fetchSong);
     if (negative) {
+      dbg("negative cache hit — skipping fetch");
       session.outcome = "fetched-empty";
       session.button.setState("unavailable");
       return;
@@ -91,10 +99,12 @@ async function runFetchPipeline(args: {
     const lrcResult = await fetchLrclib({
       artist: fetchArtist, song: fetchSong, durationSec: meta.durationSec,
     });
+    dbg("lrclib result", lrcResult ? { id: lrcResult.id, hasSync: !!lrcResult.syncedLyrics, hasPlain: !!lrcResult.plainLyrics, duration: lrcResult.duration } : null);
     if (lrcResult?.syncedLyrics) {
       record = await persistLrclib(fetchArtist, fetchSong, lrcResult);
     } else {
       const geniusText = await fetchGeniusViaBackground(fetchArtist, fetchSong);
+      dbg("genius result", geniusText ? "found" : "not found");
       if (geniusText) {
         record = await persistGenius(fetchArtist, fetchSong, geniusText);
       } else if (lrcResult?.plainLyrics) {
@@ -106,11 +116,13 @@ async function runFetchPipeline(args: {
   }
 
   if (!record) {
+    dbg("no lyrics found anywhere");
     session.outcome = "fetched-empty";
     session.button.setState("unavailable");
     return;
   }
 
+  dbg("rendering", record.source, record.syncedLyrics ? "synced" : "plain");
   await renderRecord(record);
 }
 

@@ -13,6 +13,7 @@ export class LyricsOverlay {
   private controlsEl: HTMLDivElement;
   private lines: LrcLine[] = [];
   private mode: OverlayMode = "synced";
+  private controlsObserver: MutationObserver | null = null;
 
   constructor(parent: HTMLElement, settings: UserSettings, onWrongSong: () => void) {
     this.el = document.createElement("div");
@@ -49,6 +50,26 @@ export class LyricsOverlay {
     );
     this.applyModeVisibility();
     parent.appendChild(this.el);
+
+    if (settings.position === "bottom") {
+      this.startControlsObserver();
+    }
+  }
+
+  private startControlsObserver(): void {
+    const player = document.getElementById("movie_player");
+    if (!player) return;
+
+    const adjust = () => {
+      const autohide = player.classList.contains("ytp-autohide");
+      // Controls visible → no ytp-autohide → lift overlay above controls bar
+      // Controls hidden → ytp-autohide present → drop down near bottom edge
+      this.el.style.bottom = autohide ? "12px" : "72px";
+    };
+
+    adjust();
+    this.controlsObserver = new MutationObserver(adjust);
+    this.controlsObserver.observe(player, { attributes: true, attributeFilter: ["class"] });
   }
 
   setSyncedLines(lines: LrcLine[]): void {
@@ -87,6 +108,7 @@ export class LyricsOverlay {
   }
 
   destroy(): void {
+    this.controlsObserver?.disconnect();
     this.el.remove();
   }
 
