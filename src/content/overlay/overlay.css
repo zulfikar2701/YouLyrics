@@ -1,0 +1,51 @@
+.ytlyrics-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 24px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 100%);
+  color: #fff;
+  text-align: center;
+  font-family: "YouTube Sans", "Roboto", sans-serif;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+  transition: opacity 0.2s ease;
+}
+.ytlyrics-overlay[data-position="bottom"] { bottom: 60px; }
+.ytlyrics-overlay[data-position="middle"] { top: 50%; transform: translateY(-50%); }
+.ytlyrics-overlay[data-position="top"] { top: 80px; }
+.ytlyrics-overlay[data-mode="synced"] .ytlyrics-line {
+  opacity: 0.55;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.ytlyrics-overlay[data-mode="synced"] .ytlyrics-line.ytlyrics-active {
+  opacity: 1;
+  transform: scale(1.08);
+  font-weight: 600;
+}
+.ytlyrics-overlay[data-mode="static"] .ytlyrics-static {
+  max-height: 40vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  pointer-events: auto;
+  padding: 8px 0;
+  line-height: 1.45;
+}
+.ytlyrics-overlay[data-mode="static"] .ytlyrics-static-header {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+.ytlyrics-overlay[data-hidden="true"] { opacity: 0; pointer-events: none; }
+.ytlyrics-controls {
+  pointer-events: auto;
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+.ytlyrics-controls a { color: #9cf; cursor: pointer; }

@@ -1,2 +1,4 @@
-import { render } from "preact";
-render(<div>Settings (placeholder)</div>, document.getElementById("app")!);
+import { render, h } from "preact";
+import { App } from "./App";
+
+render(h(App, null), document.getElementById("app")!);

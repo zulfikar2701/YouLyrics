@@ -1,0 +1,27 @@
+.ytlyrics-dialog-backdrop {
+  position: absolute; inset: 0; z-index: 70;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+}
+.ytlyrics-dialog {
+  background: #1f1f1f; color: #fff; border-radius: 8px;
+  padding: 20px; min-width: 360px; max-width: 80%;
+  font-family: Roboto, sans-serif;
+}
+.ytlyrics-dialog input {
+  width: 100%; padding: 8px; margin: 4px 0; border-radius: 4px;
+  border: 1px solid #444; background: #111; color: #fff; box-sizing: border-box;
+}
+.ytlyrics-dialog button {
+  padding: 8px 16px; background: #cc0000; color: #fff;
+  border: 0; border-radius: 4px; cursor: pointer; margin-top: 8px;
+}
+.ytlyrics-dialog ul { list-style: none; padding: 0; max-height: 300px; overflow-y: auto; }
+.ytlyrics-dialog li {
+  padding: 8px; cursor: pointer; border-radius: 4px;
+}
+.ytlyrics-dialog li:hover { background: #333; }
+.ytlyrics-dialog .meta { font-size: 12px; color: #aaa; }
+.ytlyrics-dialog .badge {
+  font-size: 10px; background: #2d6cdf; padding: 2px 6px; border-radius: 3px; margin-left: 6px;
+}
