@@ -4,6 +4,7 @@ export type LyricsRecord = {
   source: "lrclib" | "genius";
   lrclibId?: number;
   fetchedAt: number;
+  offset?: number; // seconds, applied to all LRC timestamps; user-adjustable
 };
 
 export type NoLyricsRecord = {

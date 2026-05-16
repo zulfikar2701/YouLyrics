@@ -21,12 +21,23 @@ export type LineChangeCallback = (index: number) => void;
 export class SyncEngine {
   private rafId: number | null = null;
   private currentIndex = -2;
+  private offset = 0;
 
   constructor(
     private video: HTMLVideoElement,
     private lines: LrcLine[],
     private onLineChange: LineChangeCallback,
   ) {}
+
+  setOffset(seconds: number): void {
+    this.offset = seconds;
+    this.currentIndex = -2;
+    this.tick();
+  }
+
+  getOffset(): number {
+    return this.offset;
+  }
 
   start(): void {
     this.video.addEventListener("seeked", this.handleSeek);
@@ -65,7 +76,7 @@ export class SyncEngine {
   };
 
   tick(): void {
-    const idx = findLineIndex(this.lines, this.video.currentTime);
+    const idx = findLineIndex(this.lines, this.video.currentTime + this.offset);
     if (idx !== this.currentIndex) {
       this.currentIndex = idx;
       this.onLineChange(idx);

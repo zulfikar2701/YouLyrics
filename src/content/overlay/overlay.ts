@@ -11,11 +11,21 @@ export class LyricsOverlay {
   private staticEl: HTMLDivElement;
   private staticHeaderEl: HTMLDivElement;
   private controlsEl: HTMLDivElement;
+  private offsetLabel: HTMLSpanElement | null = null;
   private lines: LrcLine[] = [];
   private mode: OverlayMode = "synced";
   private controlsObserver: MutationObserver | null = null;
+  private offset = 0;
+  private onOffsetChange: ((delta: number) => void) | null = null;
 
-  constructor(parent: HTMLElement, settings: UserSettings, onWrongSong: () => void) {
+  constructor(
+    parent: HTMLElement,
+    settings: UserSettings,
+    onWrongSong: () => void,
+    onOffsetChange?: (delta: number) => void,
+  ) {
+    this.onOffsetChange = onOffsetChange ?? null;
+
     this.el = document.createElement("div");
     this.el.className = "ytlyrics-overlay";
     this.el.dataset.mode = "synced";
@@ -38,10 +48,29 @@ export class LyricsOverlay {
 
     this.controlsEl = document.createElement("div");
     this.controlsEl.className = "ytlyrics-controls";
+
     const wrong = document.createElement("a");
     wrong.textContent = "Wrong song?";
     wrong.addEventListener("click", onWrongSong);
     this.controlsEl.appendChild(wrong);
+
+    if (this.onOffsetChange) {
+      const up = document.createElement("button");
+      up.textContent = "▲";
+      up.title = "Lyrics faster (+0.5s)";
+      up.addEventListener("click", () => this.onOffsetChange!(+0.5));
+
+      this.offsetLabel = document.createElement("span");
+      this.offsetLabel.className = "offset-label";
+      this.updateOffsetLabel();
+
+      const down = document.createElement("button");
+      down.textContent = "▼";
+      down.title = "Lyrics slower (-0.5s)";
+      down.addEventListener("click", () => this.onOffsetChange!(-0.5));
+
+      this.controlsEl.append(up, this.offsetLabel, down);
+    }
 
     this.el.append(
       this.staticHeaderEl, this.staticEl,
@@ -62,8 +91,6 @@ export class LyricsOverlay {
 
     const adjust = () => {
       const autohide = player.classList.contains("ytp-autohide");
-      // Controls visible → no ytp-autohide → lift overlay above controls bar
-      // Controls hidden → ytp-autohide present → drop down near bottom edge
       this.el.style.bottom = autohide ? "12px" : "72px";
     };
 
@@ -105,6 +132,17 @@ export class LyricsOverlay {
   applySettings(s: UserSettings): void {
     this.el.dataset.position = s.position;
     this.el.style.fontSize = `${s.fontSize}px`;
+  }
+
+  setOffset(seconds: number): void {
+    this.offset = seconds;
+    this.updateOffsetLabel();
+  }
+
+  private updateOffsetLabel(): void {
+    if (!this.offsetLabel) return;
+    const sign = this.offset >= 0 ? "+" : "";
+    this.offsetLabel.textContent = `Offset: ${sign}${this.offset.toFixed(1)}s`;
   }
 
   destroy(): void {

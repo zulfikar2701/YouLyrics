@@ -133,16 +133,21 @@ async function renderRecord(record: LyricsRecord) {
   const video = getVideoElement();
   if (!player || !video) return;
 
+  const offset = record.offset ?? 0;
+
   const overlay = new LyricsOverlay(
     player, settings,
     () => openWrongSongDialog(),
+    (delta) => void adjustOffset(delta),
   );
+  overlay.setOffset(offset);
   session.overlay = overlay;
 
   if (record.syncedLyrics) {
     const lines = parseLrc(record.syncedLyrics);
     overlay.setSyncedLines(lines);
     const engine = new SyncEngine(video, lines, (idx) => overlay.render(idx));
+    engine.setOffset(offset);
     engine.start();
     session.engine = engine;
   } else if (record.plainLyrics) {
@@ -158,24 +163,43 @@ async function renderRecord(record: LyricsRecord) {
   session.button.setState("available");
 }
 
+async function adjustOffset(delta: number) {
+  if (!session) return;
+  const { parsed } = session;
+  const record = await getLyrics(parsed.artist, parsed.song);
+  if (!record || !record.syncedLyrics) return;
+
+  const newOffset = (record.offset ?? 0) + delta;
+  const updated: LyricsRecord = { ...record, offset: newOffset };
+  await putLyrics(parsed.artist, parsed.song, updated);
+
+  session.overlay?.setOffset(newOffset);
+  session.engine?.setOffset(newOffset);
+  dbg("offset adjusted to", newOffset);
+}
+
 async function persistLrclib(artist: string, song: string, r: LrclibResult): Promise<LyricsRecord> {
+  const existing = await getLyrics(artist, song);
   const rec: LyricsRecord = {
     syncedLyrics: r.syncedLyrics,
     plainLyrics: r.plainLyrics,
     source: "lrclib",
     lrclibId: r.id,
     fetchedAt: Date.now(),
+    offset: existing?.offset ?? 0,
   };
   await putLyrics(artist, song, rec);
   return rec;
 }
 
 async function persistGenius(artist: string, song: string, text: string): Promise<LyricsRecord> {
+  const existing = await getLyrics(artist, song);
   const rec: LyricsRecord = {
     syncedLyrics: null,
     plainLyrics: text,
     source: "genius",
     fetchedAt: Date.now(),
+    offset: existing?.offset ?? 0,
   };
   await putLyrics(artist, song, rec);
   return rec;
