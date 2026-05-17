@@ -1,6 +1,7 @@
 import { onYoutubeNavigation, extractMetadata, getPlayerElement, getVideoElement } from "./youtube-dom";
 import { normalizeTitle } from "./normalizer";
-import { shouldAutoFetch } from "./detector";
+// detector.ts still available for future use but auto-fetch is now default
+// import { shouldAutoFetch } from "./detector";
 import { getLyrics, putLyrics, getNoLyrics, putNoLyrics, getOverride, putOverride } from "./cache";
 import { fetchLrclib } from "./lrclib";
 import { parseLrc } from "./lrc-parser";
@@ -56,14 +57,26 @@ async function run() {
   session = { meta, parsed, overlay: null, button, engine: null, outcome: "never-fetched" };
 
   const override = await getOverride(meta.videoId);
-  const allowAuto = override !== null || shouldAutoFetch(meta, settings.maxDurationSec, (m) => dbg("detector", m));
-  dbg("allowAuto", allowAuto, "override", override !== null);
 
-  if (!allowAuto) {
+  // Skip only hard limits (live streams, very short/very long videos)
+  if (meta.isLive) {
+    dbg("skipped: live stream");
+    button.setState("unavailable");
+    return;
+  }
+  if (meta.durationSec < 30) {
+    dbg(`skipped: duration ${meta.durationSec}s < 30s`);
+    button.setState("unavailable");
+    return;
+  }
+  if (meta.durationSec > settings.maxDurationSec) {
+    dbg(`skipped: duration ${meta.durationSec}s > ${settings.maxDurationSec}s`);
     button.setState("unavailable");
     return;
   }
 
+  // Always attempt fetch — no keyword-based blocking
+  dbg("auto-fetching lyrics for", parsed.artist, "-", parsed.song);
   await runFetchPipeline({ artist: parsed.artist, song: parsed.song, override });
 }
 
@@ -87,28 +100,33 @@ async function runFetchPipeline(args: {
   if (!record && !args.override) {
     const negative = await getNoLyrics(fetchArtist, fetchSong);
     if (negative) {
-      dbg("negative cache hit — skipping fetch");
+      dbg("negative cache hit — showing not-found overlay");
       session.outcome = "fetched-empty";
-      session.button.setState("unavailable");
+      session.button.setState("available");
+      await renderNotFound();
       return;
     }
   }
 
-  // 3. Fetch fresh: LRCLIB → Genius fallback
+  // 3. Fetch fresh: LRCLIB synced → LRCLIB plain → Genius → not found
   if (!record) {
     const lrcResult = await fetchLrclib({
       artist: fetchArtist, song: fetchSong, durationSec: meta.durationSec,
     });
     dbg("lrclib result", lrcResult ? { id: lrcResult.id, hasSync: !!lrcResult.syncedLyrics, hasPlain: !!lrcResult.plainLyrics, duration: lrcResult.duration } : null);
+
     if (lrcResult?.syncedLyrics) {
+      // Priority 1: LRCLIB synced lyrics
+      record = await persistLrclib(fetchArtist, fetchSong, lrcResult);
+    } else if (lrcResult?.plainLyrics) {
+      // Priority 2: LRCLIB plain lyrics
       record = await persistLrclib(fetchArtist, fetchSong, lrcResult);
     } else {
+      // Priority 3: Genius plain lyrics
       const geniusText = await fetchGeniusViaBackground(fetchArtist, fetchSong);
       dbg("genius result", geniusText ? "found" : "not found");
       if (geniusText) {
         record = await persistGenius(fetchArtist, fetchSong, geniusText);
-      } else if (lrcResult?.plainLyrics) {
-        record = await persistLrclib(fetchArtist, fetchSong, lrcResult);
       } else {
         await putNoLyrics(fetchArtist, fetchSong);
       }
@@ -116,9 +134,10 @@ async function runFetchPipeline(args: {
   }
 
   if (!record) {
-    dbg("no lyrics found anywhere");
+    dbg("no lyrics found — showing not-found overlay");
     session.outcome = "fetched-empty";
-    session.button.setState("unavailable");
+    session.button.setState("available");
+    await renderNotFound();
     return;
   }
 
@@ -161,6 +180,20 @@ async function renderRecord(record: LyricsRecord) {
   }
 
   session.button.setState("available");
+}
+
+async function renderNotFound() {
+  if (!session) return;
+  const settings = await getSettings();
+  const player = getPlayerElement();
+  if (!player) return;
+
+  const overlay = new LyricsOverlay(
+    player, settings,
+    () => openWrongSongDialog(),
+  );
+  overlay.setNotFound();
+  session.overlay = overlay;
 }
 
 async function adjustOffset(delta: number) {

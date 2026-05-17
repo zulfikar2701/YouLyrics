@@ -41,6 +41,11 @@
   opacity: 0.7;
   margin-bottom: 6px;
 }
+.ytlyrics-overlay[data-mode="not-found"] .ytlyrics-not-found {
+  opacity: 0.6;
+  font-size: 14px;
+  padding: 8px 0;
+}
 .ytlyrics-overlay[data-hidden="true"] { opacity: 0; pointer-events: none; }
 .ytlyrics-controls {
   pointer-events: auto;

@@ -1,7 +1,7 @@
 import type { LrcLine, UserSettings } from "../../shared/types";
 import "./overlay.css";
 
-export type OverlayMode = "synced" | "static";
+export type OverlayMode = "synced" | "static" | "not-found";
 
 export class LyricsOverlay {
   private el: HTMLDivElement;
@@ -10,6 +10,7 @@ export class LyricsOverlay {
   private nextEl: HTMLDivElement;
   private staticEl: HTMLDivElement;
   private staticHeaderEl: HTMLDivElement;
+  private notFoundEl: HTMLDivElement;
   private controlsEl: HTMLDivElement;
   private offsetLabel: HTMLSpanElement | null = null;
   private lines: LrcLine[] = [];
@@ -38,6 +39,10 @@ export class LyricsOverlay {
     this.staticHeaderEl.textContent = "Lyrics from Genius (not synced)";
     this.staticEl = document.createElement("div");
     this.staticEl.className = "ytlyrics-static";
+
+    this.notFoundEl = document.createElement("div");
+    this.notFoundEl.className = "ytlyrics-not-found";
+    this.notFoundEl.textContent = "Lyrics not found";
 
     this.prevEl = document.createElement("div");
     this.prevEl.className = "ytlyrics-line ytlyrics-prev";
@@ -74,6 +79,7 @@ export class LyricsOverlay {
 
     this.el.append(
       this.staticHeaderEl, this.staticEl,
+      this.notFoundEl,
       this.prevEl, this.activeEl, this.nextEl,
       this.controlsEl,
     );
@@ -114,6 +120,12 @@ export class LyricsOverlay {
     this.staticEl.textContent = text;
   }
 
+  setNotFound(): void {
+    this.mode = "not-found";
+    this.el.dataset.mode = "not-found";
+    this.applyModeVisibility();
+  }
+
   render(idx: number): void {
     if (this.mode !== "synced") return;
     this.prevEl.textContent = idx > 0 ? (this.lines[idx - 1]?.text ?? "") : "";
@@ -151,11 +163,12 @@ export class LyricsOverlay {
   }
 
   private applyModeVisibility(): void {
-    const synced = this.mode === "synced";
-    this.prevEl.style.display = synced ? "" : "none";
-    this.activeEl.style.display = synced ? "" : "none";
-    this.nextEl.style.display = synced ? "" : "none";
-    this.staticHeaderEl.style.display = synced ? "none" : "";
-    this.staticEl.style.display = synced ? "none" : "";
+    const m = this.mode;
+    this.prevEl.style.display = m === "synced" ? "" : "none";
+    this.activeEl.style.display = m === "synced" ? "" : "none";
+    this.nextEl.style.display = m === "synced" ? "" : "none";
+    this.staticHeaderEl.style.display = m === "static" ? "" : "none";
+    this.staticEl.style.display = m === "static" ? "" : "none";
+    this.notFoundEl.style.display = m === "not-found" ? "" : "none";
   }
 }
