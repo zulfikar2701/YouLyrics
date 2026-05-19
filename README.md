@@ -1,3 +1,5 @@
+A side-project vibe-coded with Opus 4.6 with Superpowers
+
 <p align="center">
   <img src="public/icons/banner.svg" alt="YouTube Synced Lyrics" width="100%"/>
 </p>
