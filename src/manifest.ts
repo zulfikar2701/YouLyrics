@@ -6,8 +6,8 @@ export default defineManifest({
   name: "YouTube Synced Lyrics",
   version: pkg.version,
   description: "Auto-fetched synced lyrics for YouTube music videos",
-  icons: { 128: "icons/128.png" },
-  action: { default_popup: "src/popup/index.html", default_icon: "icons/128.png" },
+  icons: { 16: "icons/16.png", 48: "icons/48.png", 128: "icons/128.png" },
+  action: { default_popup: "src/popup/index.html", default_icon: { 16: "icons/16.png", 48: "icons/48.png", 128: "icons/128.png" } },
   background: { service_worker: "src/background/index.ts", type: "module" },
   content_scripts: [
     {
