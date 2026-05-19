@@ -97,7 +97,7 @@ export class LyricsOverlay {
 
     const adjust = () => {
       const autohide = player.classList.contains("ytp-autohide");
-      this.el.style.bottom = autohide ? "12px" : "72px";
+      this.el.style.bottom = autohide ? "4px" : "48px";
     };
 
     adjust();
